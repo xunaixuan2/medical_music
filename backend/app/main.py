@@ -63,7 +63,7 @@ learning_graph = build_learning_graph(repository, analyzer, culture_graph)
 # 服务端会话态（MVP 内存态；后续由 PostgreSQL / Redis 承接）
 _SESSIONS: dict[str, dict[str, Any]] = {}
 
-app = FastAPI(title="声入华夏 API", version="0.1.0")
+app = FastAPI(title="声生不息·声越岐黄 API", version="0.1.0")
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 
