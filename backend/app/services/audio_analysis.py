@@ -85,7 +85,11 @@ class QwenAudioAnalyzer:
             return None
 
     def _transcribe_wav(self, wav_path: str) -> str:
-        """对已转好的 wav 做 base64 上传 DashScope ASR，返回识别文本。"""
+        """对已转好的 wav 做 base64 上传 DashScope ASR，返回识别文本。
+
+        演唱音频对语音 ASR 而言处于边界状态，偶发返回空或 ASR_RESPONSE_HAVE_NO_WORDS；
+        这里做有限重试，显著提升「唱了整段」时的成功率。
+        """
         audio_b64 = base64.b64encode(Path(wav_path).read_bytes()).decode()
         body = {
             "model": self._model,
@@ -104,15 +108,26 @@ class QwenAudioAnalyzer:
             },
             "parameters": {"format": "wav", "sample_rate": self._sample_rate},
         }
-        resp = httpx.post(
-            _DASHSCOPE_URL,
-            json=body,
-            headers={"Authorization": f"Bearer {self._api_key}", "X-DashScope-SSE": "disable"},
-            timeout=120,
-        )
-        if resp.status_code >= 400:
-            self._raise_asr_error(resp)
-        return self._extract_text(resp.json())
+        no_words = False
+        for _ in range(3):
+            resp = httpx.post(
+                _DASHSCOPE_URL,
+                json=body,
+                headers={"Authorization": f"Bearer {self._api_key}", "X-DashScope-SSE": "disable"},
+                timeout=120,
+            )
+            if resp.status_code >= 400:
+                try:
+                    self._raise_asr_error(resp)
+                except AsrNoWordsError:
+                    no_words = True
+                    continue
+            text = self._extract_text(resp.json())
+            if text.strip():
+                return text
+        if no_words:
+            raise AsrNoWordsError("ASR 多次尝试均未识别到词")
+        return ""
 
     @staticmethod
     def _raise_asr_error(resp: httpx.Response) -> None:

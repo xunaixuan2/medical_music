@@ -166,6 +166,9 @@
   .err { background: #fdecec; color: var(--cinnabar-deep); border: 1px solid #f0c0c0; padding: 10px 14px; border-radius: 8px; margin-top: 12px; font-size: 13px; }
   .audio-box { margin: 14px 0; }
   .audio-box audio { width: 100%; }
+  .accomp-bar { display: flex; align-items: center; gap: 10px; }
+  .accomp-bar input[type="range"] { flex: 1; accent-color: var(--cinnabar); }
+  .accomp-time { font-size: 12.5px; color: var(--ink-soft); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .record-hint { color: var(--ink-soft); font-size: 13px; margin: 6px 0 0; }
   .rec-viz { position: relative; width: 132px; height: 132px; margin: 12px auto 6px; }
   .rec-viz .core {
@@ -368,14 +371,58 @@ function sendCultureMessage() {
   act("culture_message", { message: text });
 }
 
+function getAccompaniment() {
+  const url = state.course.accompaniment || state.course.audio;
+  if (!accompanimentAudio) {
+    accompanimentAudio = new Audio(url);
+    accompanimentAudio.addEventListener("timeupdate", updateAccompUI);
+    accompanimentAudio.addEventListener("loadedmetadata", updateAccompUI);
+    accompanimentAudio.addEventListener("play", updateAccompUI);
+    accompanimentAudio.addEventListener("pause", updateAccompUI);
+    accompanimentAudio.addEventListener("ended", updateAccompUI);
+  }
+  return accompanimentAudio;
+}
+
+function fmtTime(s) {
+  s = Math.max(0, Math.floor(s || 0));
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+function updateAccompUI() {
+  const seek = document.getElementById("accomp-seek");
+  const time = document.getElementById("accomp-time");
+  const btn = document.getElementById("accomp-play");
+  if (!accompanimentAudio) return;
+  const d = accompanimentAudio.duration || 0;
+  const t = accompanimentAudio.currentTime || 0;
+  if (seek && d) seek.value = String(Math.round((t / d) * 100));
+  if (time) time.textContent = fmtTime(t) + " / " + fmtTime(d);
+  if (btn) btn.textContent = accompanimentAudio.paused ? "▶ 播放" : "⏸ 暂停";
+}
+
+function toggleAccompaniment() {
+  const a = getAccompaniment();
+  if (a.paused) a.play().catch(() => {});
+  else a.pause();
+  updateAccompUI();
+}
+
+function seekAccompaniment(v) {
+  const a = getAccompaniment();
+  if (!a.duration) return;
+  a.currentTime = (Number(v) / 100) * a.duration;
+  updateAccompUI();
+}
+
 async function startRecording(mode, index) {
-  // 跟唱：开始录音时自动从头播放伴奏。用独立 Audio 对象而非页面里的 <audio> 元素，
-  // 避免下方 render() 重绘把 <audio> 重建为暂停态而中断播放（在点击手势内同步触发以通过自动播放策略）。
+  // 跟唱：开始录音时从头播放页面上方「伴奏」进度条绑定的同一个 Audio 对象，
+  // 这样用户能通过上方进度条暂停/拖动伴奏（在点击手势内同步触发以通过自动播放策略）。
   if (mode === "singing") {
-    const url = state.course.accompaniment || state.course.audio;
-    if (!accompanimentAudio) accompanimentAudio = new Audio(url);
-    accompanimentAudio.currentTime = 0;
-    accompanimentAudio.play().catch(() => {});
+    const a = getAccompaniment();
+    a.currentTime = 0;
+    a.play().catch(() => {});
+    updateAccompUI();
   }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -492,7 +539,7 @@ async function uploadPinyin(blob, durationMs, index) {
   }
 }
 
-function render() {
+function render(response) {
   renderSteps();
   const app = document.getElementById("app");
   const phase = state.session ? state.session.phase : null;
@@ -503,13 +550,14 @@ function render() {
   else if (phase === "pinyin_choice") html = pinyinChoiceHTML();
   else if (phase === "pinyin_training") html = pinyinTrainingHTML();
   else if (phase === "singing") html = singingHTML();
-  else if (phase === "analysis_complete") html = analysisHTML();
-  else if (phase === "culture") html = cultureHTML();
-  else if (phase === "report") html = reportHTML();
+  else if (phase === "analysis_complete") html = analysisHTML(response);
+  else if (phase === "culture") html = cultureHTML(response);
+  else if (phase === "report") html = reportHTML(response);
   else html = `<p>未知阶段：${phase}</p>`;
 
   if (state.error) html += `<div class="err">${escapeHtml(state.error)}</div>`;
   app.innerHTML = html;
+  if (phase === "singing") { getAccompaniment(); updateAccompUI(); }
 }
 
 function renderSteps() {
@@ -626,7 +674,6 @@ function singingHTML() {
     : state.uploading
       ? `<div class="feedback">已录音，正在上传与分析…</div>`
       : `<button class="btn gold" onclick="startRecording('singing')">开始录音（跟唱）</button>`;
-  const acc = state.course.accompaniment || state.course.audio;
   return `
     <h2>跟唱学习</h2>
     <p class="subtitle">先听原唱熟悉旋律，点「开始录音」后将自动播放伴奏，跟随伴奏录制你的纯人声。</p>
@@ -636,7 +683,11 @@ function singingHTML() {
     </div>
     <div class="audio-box">
       <div style="font-size:13px;color:var(--ink-soft);margin-bottom:4px">伴奏（先听 / 录音时自动播放）</div>
-      <audio controls src="${acc}">您的浏览器不支持音频播放。</audio>
+      <div class="accomp-bar">
+        <button class="btn small ghost" id="accomp-play" onclick="toggleAccompaniment()">▶ 播放</button>
+        <input type="range" id="accomp-seek" min="0" max="100" value="0" oninput="seekAccompaniment(this.value)">
+        <span class="accomp-time" id="accomp-time">0:00 / 0:00</span>
+      </div>
     </div>
     <div class="verse">「天地俱生，万物以荣」<div class="py">tiān dì jù shēng，wàn wù yǐ róng</div></div>
     <div class="row">${recHtml}</div>
