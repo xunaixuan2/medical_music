@@ -1,0 +1,21 @@
+# ===================== 声入华夏 · 后端依赖 =====================
+# Python 3.10+（本项目在 3.11.5 上开发验证）
+# 安装：pip install -r requirements.txt
+#
+# 注意：除下列 Python 包外，还需两个“外部”依赖：
+#   1. ffmpeg —— 系统命令，用于把浏览器录音(webm)转成 16k 单声道 wav
+#   2. Vosk 中文模型 —— 单独下载（约 40MB），见 README「快速开始」
+
+# ---- Web 框架 ----
+fastapi>=0.115.0            # API 服务框架
+uvicorn>=0.32.0             # ASGI 服务器（启动命令：uvicorn app.main:app）
+pydantic>=2.10.0            # 请求体数据校验
+python-multipart>=0.0.12    # 文件/表单上传解析（POST /v1/recordings 必需）
+
+# ---- 学习流程状态机 ----
+langgraph>=0.6.0            # LangGraph 状态机：选课→跟读→跟唱→分析→文化→报告
+                            # （会顺带安装 langchain-core / langgraph-checkpoint 等）
+
+# ---- 音频分析与拼音 ----
+vosk>=0.3.45                # 离线中文语音识别（ASR）
+pypinyin>=0.55.0            # 汉字转拼音（带声调）

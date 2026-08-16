@@ -1,0 +1,22 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# ===== 运行时生成数据（录音 + 会话日志）=====
+backend/data/
+
+# ===== Vosk 语音模型（体积大，需自行下载，见 README）=====
+backend/models/
+
+# ===== 编辑器 / 系统 =====
+.claude/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

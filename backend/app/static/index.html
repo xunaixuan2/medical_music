@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>声入华夏 · 唱古籍学中文</title>
+<style>
+  :root {
+    --ink: #2f2a25;
+    --ink-soft: #6b635a;
+    --cinnabar: #a63a2e;
+    --cinnabar-deep: #7c2a21;
+    --gold: #b8893c;
+    --gold-soft: #d8b878;
+    --paper: #f7f1e3;
+    --paper-deep: #efe5cf;
+    --bamboo: #4a6b52;
+    --card: #fdfaf2;
+    --line: #e0d3b6;
+    --font-title: "STKaiti", "KaiTi", "楷体", serif;
+    --font-body: "STSong", "SimSun", "宋体", "Noto Serif SC", serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--font-body);
+    color: var(--ink);
+    line-height: 1.7;
+    background-color: var(--paper);
+    background-image:
+      radial-gradient(circle at 15% 20%, rgba(184,137,60,.06), transparent 40%),
+      radial-gradient(circle at 85% 75%, rgba(74,107,82,.05), transparent 45%),
+      repeating-linear-gradient(0deg, rgba(120,100,60,.02) 0 1px, transparent 1px 26px);
+  }
+
+  header {
+    position: relative;
+    padding: 34px 20px 26px;
+    text-align: center;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(166,58,46,.04), rgba(166,58,46,0));
+  }
+  header .seal {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 56px; height: 56px;
+    margin: 0 auto 12px;
+    background: var(--cinnabar);
+    color: #fdf3ea;
+    border-radius: 8px;
+    font-family: var(--font-title);
+    font-size: 17px;
+    place-items: center;
+    box-shadow: 0 2px 8px rgba(166,58,46,.35);
+  }
+  header h1 {
+    margin: 0;
+    font-family: var(--font-title);
+    font-size: 30px;
+    letter-spacing: 10px;
+    color: var(--ink);
+  }
+  header p { margin: 8px 0 0; font-size: 13px; color: var(--ink-soft); letter-spacing: 2px; }
+  header::after {
+    content: "";
+    display: block;
+    width: 180px; height: 1px;
+    margin: 18px auto 0;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  }
+
+  .wrap { max-width: 780px; margin: 0 auto; padding: 20px 16px 70px; }
+
+  .steps { display: flex; gap: 4px; margin: 6px 0 4px; }
+  .step {
+    flex: 1; text-align: center; font-size: 12px; color: var(--ink-soft);
+    padding: 9px 2px; background: var(--paper-deep); border-radius: 6px;
+    white-space: nowrap; border: 1px solid transparent;
+  }
+  .step.on {
+    background: linear-gradient(135deg, var(--cinnabar), var(--cinnabar-deep));
+    color: #fdf3ea; font-weight: 600;
+    box-shadow: 0 2px 6px rgba(166,58,46,.3);
+  }
+  .step.done { background: var(--gold-soft); color: #fff; cursor: pointer; }
+  .step.done:hover { background: var(--gold); }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 26px 24px;
+    margin-top: 14px;
+    box-shadow: 0 3px 14px rgba(120,90,40,.06);
+    position: relative;
+  }
+  .card h2 { margin: 0 0 6px; font-family: var(--font-title); font-size: 23px; letter-spacing: 3px; }
+  .subtitle { color: var(--ink-soft); font-size: 14px; margin: 0 0 18px; }
+
+  .btn {
+    display: inline-block; border: 1px solid transparent; cursor: pointer; border-radius: 8px;
+    padding: 12px 24px; font-size: 15px; font-family: var(--font-title); letter-spacing: 2px;
+    background: var(--cinnabar); color: #fdf3ea; transition: all .15s;
+  }
+  .btn:hover { background: var(--cinnabar-deep); }
+  .btn.ghost { background: transparent; color: var(--cinnabar); border-color: var(--cinnabar); }
+  .btn.ghost:hover { background: rgba(166,58,46,.06); }
+  .btn.gold { background: var(--gold); }
+  .btn.gold:hover { background: #9c732e; }
+  .btn.small { padding: 7px 15px; font-size: 13px; letter-spacing: 1px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; align-items: center; }
+
+  .tag { display: inline-block; background: #f3e8cf; color: #8a6d1f; border-radius: 999px; padding: 3px 13px; font-size: 13px; }
+  .tags { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+
+  .verse {
+    background: #fdfaf2; border: 1px solid var(--line); border-left: 4px solid var(--gold);
+    padding: 14px 16px; border-radius: 8px; margin: 12px 0;
+    font-family: var(--font-title); font-size: 17px; letter-spacing: 2px;
+  }
+  .verse .py { font-family: var(--font-body); font-size: 13px; color: var(--ink-soft); letter-spacing: 1px; margin-top: 3px; }
+
+  /* 课程列表 */
+  .course-list { display: flex; flex-direction: column; gap: 12px; margin: 14px 0; }
+  .course-card {
+    border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px;
+    background: #fffdf7;
+  }
+  .course-card h3 { margin: 0 0 4px; font-family: var(--font-title); font-size: 19px; letter-spacing: 2px; }
+  .course-card .row { margin-top: 12px; }
+  .course-card.soon { opacity: .7; }
+
+  /* 拼音跟读句子列表 */
+  .sentence-list { display: flex; flex-direction: column; gap: 10px; margin: 14px 0; }
+  .sentence {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+    background: #fffdf7; transition: background .15s;
+  }
+  .sentence.read { background: #f3f7f1; border-color: var(--bamboo); }
+  .sentence .hz { font-family: var(--font-title); font-size: 17px; letter-spacing: 2px; }
+  .sentence .py { font-family: var(--font-body); font-size: 12.5px; color: var(--ink-soft); letter-spacing: 1px; }
+  .sentence .tip { font-size: 12px; color: var(--bamboo); margin-top: 3px; }
+  .sentence .acts { display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+  .sentence .read-mark { color: var(--bamboo); font-size: 13px; }
+
+  .scores { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; margin: 16px 0; }
+  .score { border: 1px solid var(--line); border-radius: 10px; padding: 13px 8px; text-align: center; background: #fffdf7; }
+  .score .n { font-size: 26px; font-weight: 700; color: var(--cinnabar); font-family: var(--font-title); }
+  .score .l { font-size: 12px; color: var(--ink-soft); margin-top: 3px; }
+
+  .feedback { background: #fbf3e3; border-left: 4px solid var(--gold); padding: 12px 14px; border-radius: 8px; margin: 10px 0; font-size: 14px; }
+
+  .chat { border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-height: 130px; max-height: 320px; overflow-y: auto; background: #fffdf7; }
+  .msg { margin: 9px 0; }
+  .msg .who { font-size: 12px; color: var(--ink-soft); }
+  .msg.user { text-align: right; }
+  .msg.user .bubble { background: #e7efe4; color: #27402f; }
+  .msg.tutor .bubble { background: #f3e8cf; color: #4a3720; }
+  .bubble { display: inline-block; padding: 8px 13px; border-radius: 12px; max-width: 85%; text-align: left; font-size: 14px; }
+  .chat-input { display: flex; gap: 8px; margin-top: 12px; }
+  .chat-input input { flex: 1; padding: 10px 13px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: var(--font-body); background: #fffdf7; }
+
+  .report-block h3 { font-size: 15px; margin: 18px 0 6px; color: var(--cinnabar); font-family: var(--font-title); letter-spacing: 2px; }
+  .err { background: #fdecec; color: var(--cinnabar-deep); border: 1px solid #f0c0c0; padding: 10px 14px; border-radius: 8px; margin-top: 12px; font-size: 13px; }
+  .audio-box { margin: 14px 0; }
+  .audio-box audio { width: 100%; }
+  .record-hint { color: var(--ink-soft); font-size: 13px; margin: 6px 0 0; }
+  .foot { text-align: center; color: var(--ink-soft); font-size: 12px; margin-top: 26px; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="seal"><span>声</span><span>入</span><span>华</span><span>夏</span></div>
+  <h1>声入华夏</h1>
+  <p>唱一首古籍 · 学中文发音 · 悟四时养生</p>
+</header>
+
+<div class="wrap">
+  <div class="steps" id="steps"></div>
+  <div class="card" id="app"></div>
+  <div class="foot">唱古籍学中文 · 首发课程《四气调神大论》</div>
+</div>
+
+<script>
+const COURSES = [
+  {
+    id: "siqi_tiaoshen_01",
+    title: "四气调神大论（选段）",
+    book: "《黄帝内经·素问》",
+    audio: "/static/audio/yuanchang.mp3",
+    available: true,
+    intro: "春夏养阳，顺应四时以调神养生。",
+    sentences: [
+      { hanzi: "春三月，此为发陈。", pinyin: "chūn sān yuè，cǐ wéi fā chén。" },
+      { hanzi: "天地俱生，万物以荣，", pinyin: "tiān dì jù shēng，wàn wù yǐ róng，" },
+      { hanzi: "夜卧早起，广步于庭，", pinyin: "yè wò zǎo qǐ，guǎng bù yú tíng，" },
+      { hanzi: "被发缓形，以使志生，", pinyin: "pī fà huǎn xíng，yǐ shǐ zhì shēng，", tip: "「被」读 pī，通「披」，指披散头发。" },
+      { hanzi: "此春气之应，养生之道也；", pinyin: "cǐ chūn qì zhī yìng，yǎng shēng zhī dào yě；" },
+      { hanzi: "夏三月，此谓蕃秀。", pinyin: "xià sān yuè，cǐ wèi fán xiù。" },
+      { hanzi: "天地气交，万物华实，", pinyin: "tiān dì qì jiāo，wàn wù huá shí，" },
+      { hanzi: "夜卧早起，无厌于日，", pinyin: "yè wò zǎo qǐ，wú yàn yú rì，" },
+      { hanzi: "使志无怒，使华英成秀，", pinyin: "shǐ zhì wú nù，shǐ huá yīng chéng xiù，" },
+      { hanzi: "此夏气之应，养长之道也。", pinyin: "cǐ xià qì zhī yìng，yǎng zhǎng zhī dào yě。", tip: "「长」读 zhǎng，指生长、成长。" },
+    ]
+  },
+  {
+    id: "yinyang_yingxiang_01",
+    title: "阴阳应象大论",
+    book: "《黄帝内经·素问》",
+    audio: null,
+    available: false,
+    intro: "阴阳者，天地之道也。",
+    sentences: [],
+  },
+];
+
+const STEP_NAMES = ["选择课程", "拼音跟读", "跟唱学习", "演唱分析", "文化导师", "学习报告"];
+const PHASE_STEP = {
+  course_selection: 0, course_experience: 0, pinyin_choice: 1, pinyin_training: 1,
+  singing: 2, analysis_complete: 3, culture: 4, report: 5,
+};
+const STEP_TARGETS = ["course_selection", "pinyin_choice", "singing", "analysis_complete", "culture", "report"];
+const CANONICAL_ACTIONS = {
+  course_selection: [],
+  pinyin_choice: [
+    { action: "course_selected", payload: {} },
+    { action: "begin_practice", payload: {} },
+  ],
+  singing: [
+    { action: "course_selected", payload: {} },
+    { action: "begin_practice", payload: {} },
+    { action: "pinyin_decision", payload: { mode: "practice" } },
+    { action: "pinyin_attempt", payload: { token: "天地俱生" } },
+  ],
+  analysis_complete: [
+    { action: "course_selected", payload: {} },
+    { action: "begin_practice", payload: {} },
+    { action: "pinyin_decision", payload: { mode: "practice" } },
+    { action: "pinyin_attempt", payload: { token: "天地俱生" } },
+    { action: "recording_submitted", payload: { audio_ref: "recordings/replay.webm", duration_ms: 60000 } },
+  ],
+  culture: [
+    { action: "course_selected", payload: {} },
+    { action: "begin_practice", payload: {} },
+    { action: "pinyin_decision", payload: { mode: "practice" } },
+    { action: "pinyin_attempt", payload: { token: "天地俱生" } },
+    { action: "recording_submitted", payload: { audio_ref: "recordings/replay.webm", duration_ms: 60000 } },
+    { action: "open_culture", payload: {} },
+  ],
+  report: [
+    { action: "course_selected", payload: {} },
+    { action: "begin_practice", payload: {} },
+    { action: "pinyin_decision", payload: { mode: "practice" } },
+    { action: "pinyin_attempt", payload: { token: "天地俱生" } },
+    { action: "recording_submitted", payload: { audio_ref: "recordings/replay.webm", duration_ms: 60000 } },
+    { action: "open_culture", payload: {} },
+    { action: "complete_culture", payload: {} },
+  ],
+};
+
+const state = {
+  sessionId: null, session: null, courseId: null, course: null,
+  error: null, dialogue: [], readSet: new Set(), recording: false, uploading: false,
+  recordMode: null, recordIndex: null, pinyinResults: {},
+};
+let mediaRecorder = null;
+let chunks = [];
+let recordStartTime = 0;
+
+async function post(url, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || res.statusText);
+  return data;
+}
+
+async function startLearning(courseId) {
+  const course = COURSES.find(c => c.id === courseId);
+  if (!course) return;
+  if (!course.available) { state.error = "该课程即将上线，敬请期待。"; render(); return; }
+  try {
+    const data = await post("/v1/sessions", { course_id: courseId });
+    state.sessionId = data.session_id;
+    state.session = data.session;
+    state.courseId = courseId;
+    state.course = course;
+    state.dialogue = [];
+    state.readSet = new Set();
+    state.error = null;
+    const r = await post(`/v1/sessions/${state.sessionId}/action`, { action: "course_selected", payload: {} });
+    state.session = r.session;
+    render(r.response);
+  } catch (e) { state.error = e.message; render(); }
+}
+
+async function act(action, payload = {}) {
+  try {
+    const data = await post(`/v1/sessions/${state.sessionId}/action`, { action, payload });
+    state.session = data.session;
+    state.error = null;
+    render(data.response);
+  } catch (e) { state.error = e.message; render(); }
+}
+
+async function goToPhase(phase) {
+  const actions = CANONICAL_ACTIONS[phase] || [];
+  try {
+    const data = await post("/v1/sessions", { course_id: state.courseId });
+    state.sessionId = data.session_id;
+    state.session = data.session;
+    for (const a of actions) {
+      const r = await post(`/v1/sessions/${state.sessionId}/action`, a);
+      state.session = r.session;
+    }
+    state.dialogue = [];
+    state.readSet = new Set();
+    state.error = null;
+    render();
+  } catch (e) { state.error = e.message; render(); }
+}
+
+function goToStep(i) { goToPhase(STEP_TARGETS[i]); }
+
+function leadRead(text) {
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "zh-CN";
+    u.rate = 0.8;
+    speechSynthesis.speak(u);
+  } catch (e) { /* 浏览器不支持 TTS 时静默忽略 */ }
+}
+
+function sendCultureMessage() {
+  const input = document.getElementById("chat-input");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  state.dialogue.push({ role: "user", text });
+  act("culture_message", { message: text });
+}
+
+async function startRecording(mode, index) {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    chunks = [];
+    mediaRecorder.ondataavailable = e => chunks.push(e.data);
+    mediaRecorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
+      const durationMs = Math.round(Date.now() - recordStartTime);
+      if (state.recordMode === "pinyin") uploadPinyin(blob, durationMs, state.recordIndex);
+      else uploadAndSubmit(blob, durationMs);
+    };
+    mediaRecorder.start();
+    recordStartTime = Date.now();
+    state.recording = true;
+    state.recordMode = mode;
+    state.recordIndex = index;
+    state.error = null;
+    render();
+  } catch (e) {
+    state.error = "无法访问麦克风：" + e.message;
+    render();
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && state.recording) {
+    state.recording = false;
+    state.uploading = true;
+    mediaRecorder.stop();
+    render();
+  }
+}
+
+async function uploadRecording(blob, durationMs) {
+  const fd = new FormData();
+  fd.append("file", blob, "recording.webm");
+  fd.append("duration_ms", String(durationMs));
+  const res = await fetch("/v1/recordings", { method: "POST", body: fd });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || "上传失败");
+  return data;
+}
+
+async function uploadAndSubmit(blob, durationMs) {
+  try {
+    const data = await uploadRecording(blob, durationMs);
+    state.uploading = false;
+    await act("recording_submitted", { audio_ref: data.audio_ref, duration_ms: durationMs });
+  } catch (e) {
+    state.uploading = false;
+    state.error = e.message;
+    render();
+  }
+}
+
+async function uploadPinyin(blob, durationMs, index) {
+  try {
+    const data = await uploadRecording(blob, durationMs);
+    const s = state.course.sentences[index];
+    const result = await post("/v1/pinyin/analyze", {
+      audio_ref: data.audio_ref,
+      target_hanzi: s.hanzi,
+      target_pinyin: s.pinyin,
+    });
+    state.pinyinResults[index] = result;
+    state.readSet.add(index);
+    state.uploading = false;
+    render();
+  } catch (e) {
+    state.uploading = false;
+    state.error = e.message;
+    render();
+  }
+}
+
+function render() {
+  renderSteps();
+  const app = document.getElementById("app");
+  const phase = state.session ? state.session.phase : null;
+  if (!state.sessionId || phase === "course_selection") { app.innerHTML = courseListHTML(); return; }
+
+  let html = "";
+  if (phase === "course_experience") html = experienceHTML();
+  else if (phase === "pinyin_choice") html = pinyinChoiceHTML();
+  else if (phase === "pinyin_training") html = pinyinTrainingHTML();
+  else if (phase === "singing") html = singingHTML();
+  else if (phase === "analysis_complete") html = analysisHTML();
+  else if (phase === "culture") html = cultureHTML();
+  else if (phase === "report") html = reportHTML();
+  else html = `<p>未知阶段：${phase}</p>`;
+
+  if (state.error) html += `<div class="err">${escapeHtml(state.error)}</div>`;
+  app.innerHTML = html;
+}
+
+function renderSteps() {
+  const current = state.session ? (PHASE_STEP[state.session.phase] ?? 0) : -1;
+  document.getElementById("steps").innerHTML = STEP_NAMES.map((name, i) => {
+    let cls = "step";
+    if (i === current) cls += " on";
+    else if (i < current) cls += " done";
+    const click = (i < current) ? `onclick="goToStep(${i})"` : "";
+    return `<div class="${cls}" ${click} ${click ? 'title="点击返回此步骤"' : ""}>${name}</div>`;
+  }).join("");
+}
+
+function courseListHTML() {
+  const cards = COURSES.map(c => `
+    <div class="course-card ${c.available ? "" : "soon"}">
+      <h3>${escapeHtml(c.title)}</h3>
+      <p class="subtitle" style="margin-bottom:6px">${escapeHtml(c.book)}</p>
+      <p class="subtitle" style="margin-bottom:0">${escapeHtml(c.intro)}</p>
+      <div class="row">
+        ${c.available
+          ? `<button class="btn small" onclick="startLearning('${c.id}')">开始学习</button>`
+          : `<span class="tag">敬请期待</span>`}
+      </div>
+    </div>`).join("");
+  return `<h2>选择课程</h2><p class="subtitle">${COURSES.length} 门课程</p><div class="course-list">${cards}</div>`;
+}
+
+function experienceHTML() {
+  return `
+    <h2>${escapeHtml(state.course.title)}</h2>
+    <p class="subtitle">${escapeHtml(state.course.book)} · ${escapeHtml(state.course.intro)}</p>
+    <div class="tags">
+      <span class="tag">歌词</span><span class="tag">拼音</span><span class="tag">翻译</span>
+      <span class="tag">古籍出处</span><span class="tag">文化背景</span>
+    </div>
+    <div class="verse">「天地俱生，万物以荣」<div class="py">tiān dì jù shēng，wàn wù yǐ róng</div></div>
+    <div class="row">
+      <button class="btn" onclick="act('begin_practice')">进入跟读练习</button>
+      <button class="btn ghost small" onclick="goToPhase('course_selection')">返回选课</button>
+    </div>`;
+}
+
+function pinyinChoiceHTML() {
+  return `
+    <h2>拼音跟读（热身）</h2>
+    <p class="subtitle">进入跟唱前的发音热身与纠错，可跳过。</p>
+    <div class="row">
+      <button class="btn" onclick="act('pinyin_decision', {mode:'practice'})">进行拼音跟读</button>
+      <button class="btn ghost" onclick="act('pinyin_decision', {mode:'skip'})">跳过，直接跟唱</button>
+    </div>`;
+}
+
+function pinyinTrainingHTML() {
+  const readCount = state.readSet.size;
+  const total = state.course.sentences.length;
+  const rows = state.course.sentences.map((s, i) => {
+    const read = state.readSet.has(i);
+    const result = state.pinyinResults[i];
+    const isRecording = state.recording && state.recordMode === "pinyin" && state.recordIndex === i;
+    const isUploading = state.uploading && state.recordMode === "pinyin" && state.recordIndex === i;
+
+    let acts;
+    if (isRecording) {
+      acts = `<button class="btn small gold" onclick="stopRecording()">停止</button>`;
+    } else if (isUploading) {
+      acts = `<span class="read-mark">分析中…</span>`;
+    } else {
+      acts = `<button class="btn small ghost" onclick="leadRead('${escapeHtml(s.hanzi).replace(/'/g, "\\'")}')">领读</button>
+              <button class="btn small" onclick="startRecording('pinyin', ${i})">${read ? "再跟读" : "跟读"}</button>`;
+    }
+
+    let feedbackHtml = "";
+    if (result) {
+      const mismatchTags = (result.mismatches || []).slice(0, 6)
+        .map(m => `<span class="tag">${escapeHtml(m.token)}</span>`).join("");
+      feedbackHtml = `
+        <div class="feedback" style="margin-top:10px">
+          识别：${escapeHtml(result.recognized || "（未听清）")} · 准确度 <b>${result.accuracy}%</b>
+          <div style="margin-top:4px">${escapeHtml(result.advice)}</div>
+          ${mismatchTags ? `<div class="tags" style="margin:6px 0 0">${mismatchTags}</div>` : ""}
+        </div>`;
+    }
+
+    return `
+      <div class="sentence ${read ? "read" : ""}">
+        <div style="flex:1">
+          <div class="hz">${escapeHtml(s.hanzi)}</div>
+          <div class="py">${escapeHtml(s.pinyin)}</div>
+          ${s.tip ? `<div class="tip">${escapeHtml(s.tip)}</div>` : ""}
+          ${feedbackHtml}
+        </div>
+        <div class="acts">${acts}</div>
+      </div>`;
+  }).join("");
+
+  return `
+    <h2>拼音跟读训练</h2>
+    <p class="subtitle">逐句跟读，先听「领读」，再点「跟读」录音上传分析（已读 ${readCount}/${total}）。</p>
+    <div class="sentence-list">${rows}</div>
+    <div class="row">
+      <button class="btn" ${readCount === 0 ? "disabled" : ""} onclick="act('pinyin_attempt', {token:'天地俱生'})">完成跟读，去跟唱</button>
+    </div>`;
+}
+
+function singingHTML() {
+  const recHtml = state.recording
+    ? `<button class="btn gold" onclick="stopRecording()">停止录音</button><div class="feedback">正在录音…请跟唱。</div>`
+    : state.uploading
+      ? `<div class="feedback">已录音，正在上传与分析…</div>`
+      : `<button class="btn gold" onclick="startRecording('singing')">开始录音（跟唱）</button>`;
+  return `
+    <h2>跟唱学习</h2>
+    <p class="subtitle">先听原唱，跟随伴奏与节奏，再录制你的纯人声上传。</p>
+    <div class="audio-box">
+      <audio controls src="${state.course.audio}">您的浏览器不支持音频播放。</audio>
+    </div>
+    <div class="verse">「天地俱生，万物以荣」<div class="py">tiān dì jù shēng，wàn wù yǐ róng</div></div>
+    <div class="row">${recHtml}</div>
+    <p class="record-hint">录音需要浏览器麦克风权限（本地 localhost 环境可用）。</p>`;
+}
+
+function analysisHTML(response) {
+  const analysis = response && response.analysis ? response.analysis : {};
+  const scores = analysis.scores || {};
+  const feedback = analysis.pronunciation_feedback || [];
+  const recognized = analysis.recognized || "";
+  return `
+    <h2>演唱分析报告</h2>
+    <p class="subtitle">AI 已完成咬字、歌词、节奏、音准、韵律分析。</p>
+    ${recognized ? `<div class="feedback"><b>识别歌词：</b>${escapeHtml(recognized)}</div>` : '<div class="feedback">未识别到清晰语音，请重新跟唱。</div>'}
+    <div class="scores">
+      ${scoreItem("发音", scores.pronunciation)}
+      ${scoreItem("歌词", scores.lyrics_accuracy)}
+      ${scoreItem("节奏", scores.rhythm)}
+      ${scoreItem("音准", scores.pitch)}
+      ${scoreItem("韵律", scores.prosody)}
+    </div>
+    ${feedback.map(f => `<div class="feedback"><b>${escapeHtml(f.token)}</b>（${escapeHtml(f.target_pinyin)}→${escapeHtml(f.recognized_pinyin)}）：${escapeHtml(f.advice)}</div>`).join("")}
+    <div class="row"><button class="btn" onclick="act('open_culture')">进入文化导师</button></div>`;
+}
+
+function cultureHTML(response) {
+  const turn = response && response.turn;
+  if (turn && turn.answer) state.dialogue.push({ role: "tutor", text: turn.answer });
+  const bubbles = state.dialogue.map(m => `
+    <div class="msg ${m.role}"><span class="who">${m.role === "user" ? "你" : "文化导师"}</span><br>
+    <span class="bubble">${escapeHtml(m.text)}</span></div>`).join("");
+  return `
+    <h2>古籍文化导师</h2>
+    <p class="subtitle">苏格拉底式对话：结合歌词与你的理解提问、引导。</p>
+    <div class="chat">${bubbles || '<p style="color:var(--ink-soft)">试着问一句，例如：四气调神是什么意思？</p>'}</div>
+    <div class="chat-input">
+      <input id="chat-input" placeholder="输入你的想法…" onkeydown="if(event.key==='Enter')sendCultureMessage()">
+      <button class="btn small" onclick="sendCultureMessage()">发送</button>
+    </div>
+    <div class="row"><button class="btn ghost" onclick="act('complete_culture')">完成文化理解，看报告</button></div>`;
+}
+
+function reportHTML(response) {
+  const report = response && response.report ? response.report : {};
+  const rec = response && response.recommendation ? response.recommendation : {};
+  const mastery = report.culture_mastery || {};
+  const errors = report.common_errors || [];
+  return `
+    <h2>本次学习报告</h2>
+    <div class="report-block">
+      <h3>演唱得分</h3>
+      <div class="scores">
+        ${scoreItem("发音", report.pronunciation_score)}
+        ${scoreItem("节奏", report.rhythm_score)}
+        ${scoreItem("韵律", report.prosody_score)}
+      </div>
+    </div>
+    <div class="report-block">
+      <h3>文化掌握度</h3>
+      <div class="tags">${Object.entries(mastery).map(([k, v]) => `<span class="tag">${escapeHtml(k)}：${v}</span>`).join("") || '<span class="subtitle">暂无</span>'}</div>
+    </div>
+    <div class="report-block">
+      <h3>易错字</h3>
+      <div class="tags">${errors.map(e => `<span class="tag">${escapeHtml(e)}</span>`).join("") || '<span class="subtitle">无</span>'}</div>
+    </div>
+    <div class="report-block">
+      <h3>复习推荐</h3>
+      <div class="feedback">${escapeHtml(rec.review_line || "")} · 复习字词：${(rec.review_tokens || []).join("、")}</div>
+    </div>
+    <div class="row"><button class="btn" onclick="act('restart')">再学一遍</button></div>`;
+}
+
+function scoreItem(label, n) {
+  return `<div class="score"><div class="n">${n ?? "—"}</div><div class="l">${label}</div></div>`;
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+render();
+</script>
+</body>
+</html>
