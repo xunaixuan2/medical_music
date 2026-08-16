@@ -34,7 +34,7 @@
 - **状态机**：LangGraph（`learning_graph` + `culture_graph` 两张子图）
 - **语音识别**：通义千问 ASR（`qwen-audio-3.0-asr-flash`，云端 DashScope API）
 - **拼音**：pypinyin（带声调）
-- **音频处理**：ffmpeg（webm → 16k 单声道 wav）
+- **音频处理**：ffmpeg（webm → 16k 单声道 wav）+ numpy（F0 基频检测 / 能量包络的启发式音准·韵律评分）
 - **前端**：原生 HTML/CSS/JS 单页应用（中医风格 UI），Web Speech API 领读 + MediaRecorder 录音
 - **数据持久化**：MVP 内存态 + JSONL 追加写（`backend/data/sessions.jsonl`），后续可替换为 PostgreSQL
 
@@ -150,14 +150,15 @@ python demo.py
 ## 已知限制
 
 - **语音识别精度**：通义千问 ASR 对古汉语、演唱（带旋律/哼唱）场景的识别率优于传统离线小模型，但静音或纯哼唱仍可能识别为空、准确度偏低。可尝试在录音前先清晰朗读歌词，或后续接入音准/节奏专用分析来提升。
-- **音准 / 韵律**：当前 `pitch`、`prosody` 两项评分暂未实现（返回 `null`），属于第二阶段能力。
+- **音准 / 韵律**：`pitch`、`prosody` 采用启发式评分（自相关 F0 基频检测 + 能量包络），衡量有效发声、音高清晰度与节奏韵律感，无需参考旋律；若要更精确的「音准」（与原唱逐音对比音高偏差），需后续引入参考旋律与 DTW 对齐。
 - **文化导师**：目前是基于规则的「误解识别 + 引导式追问」桩，后续可替换为 RAG（检索知识库 + LLM 生成分层解释）。
 - **会话态**：MVP 使用内存字典 + JSONL 落盘，重启服务后内存会话丢失（历史记录仍在 `data/sessions.jsonl`），后续可迁移到 PostgreSQL / Redis。
 
 ## 后续规划
 
 - [x] 接入云端语音服务（通义千问 ASR），提升识别率
-- [ ] 增加音准（pitch）、韵律（prosody）分析
+- [x] 增加音准（pitch）、韵律（prosody）分析（启发式评分）
+- [ ] 音准升级为与原唱旋律逐音对齐（参考旋律 + DTW）
 - [ ] 文化导师升级为 RAG + LLM 真实对话
 - [ ] 课程内容后台 / 数据库承接，支持多课程
 - [ ] 会话与用户体系（登录、进度、错题本）

@@ -166,7 +166,24 @@
   .err { background: #fdecec; color: var(--cinnabar-deep); border: 1px solid #f0c0c0; padding: 10px 14px; border-radius: 8px; margin-top: 12px; font-size: 13px; }
   .audio-box { margin: 14px 0; }
   .audio-box audio { width: 100%; }
+  .accomp-bar { display: flex; align-items: center; gap: 10px; }
+  .accomp-bar input[type="range"] { flex: 1; accent-color: var(--cinnabar); }
+  .accomp-time { font-size: 12.5px; color: var(--ink-soft); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .record-hint { color: var(--ink-soft); font-size: 13px; margin: 6px 0 0; }
+  .rec-viz { position: relative; width: 132px; height: 132px; margin: 12px auto 6px; }
+  .rec-viz .core {
+    position: absolute; left: 50%; top: 50%; width: 66px; height: 66px; margin: -33px 0 0 -33px;
+    border-radius: 50%; display: grid; place-items: center;
+    background: radial-gradient(circle at 32% 30%, #e2bd74, #a63a2e 72%);
+    box-shadow: 0 0 20px rgba(166,58,46,.45); color: #fdf3ea; font-size: 13px; letter-spacing: 1px;
+    transition: transform .06s linear;
+  }
+  .rec-viz .ring {
+    position: absolute; left: 50%; top: 50%; width: 66px; height: 66px; margin: -33px 0 0 -33px;
+    border-radius: 50%; border: 2px solid var(--cinnabar); opacity: 0; transform: scale(1); pointer-events: none;
+  }
+  .rec-viz .ring.go { animation: rec-ripple .9s ease-out; }
+  @keyframes rec-ripple { 0% { transform: scale(1); opacity: .75; } 100% { transform: scale(2.2); opacity: 0; } }
   .foot { text-align: center; color: var(--ink-soft); font-size: 12px; margin-top: 26px; letter-spacing: 1px; }
 </style>
 </head>
@@ -190,6 +207,7 @@ const COURSES = [
     title: "四气调神大论（选段）",
     book: "《黄帝内经·素问》",
     audio: "/static/audio/yuanchang.mp3",
+    accompaniment: "/static/audio/banzou.mp3",
     available: true,
     intro: "春夏养阳，顺应四时以调神养生。",
     sentences: [
@@ -268,6 +286,13 @@ const state = {
 let mediaRecorder = null;
 let chunks = [];
 let recordStartTime = 0;
+let accompanimentAudio = null;
+let audioCtx = null;
+let analyser = null;
+let vizData = null;
+let vizRaf = null;
+let vizLastRing = 0;
+let vizRingIdx = 0;
 
 async function post(url, body) {
   const res = await fetch(url, {
@@ -365,7 +390,59 @@ async function sendCultureMessage() {
   }
 }
 
+function getAccompaniment() {
+  const url = state.course.accompaniment || state.course.audio;
+  if (!accompanimentAudio) {
+    accompanimentAudio = new Audio(url);
+    accompanimentAudio.addEventListener("timeupdate", updateAccompUI);
+    accompanimentAudio.addEventListener("loadedmetadata", updateAccompUI);
+    accompanimentAudio.addEventListener("play", updateAccompUI);
+    accompanimentAudio.addEventListener("pause", updateAccompUI);
+    accompanimentAudio.addEventListener("ended", updateAccompUI);
+  }
+  return accompanimentAudio;
+}
+
+function fmtTime(s) {
+  s = Math.max(0, Math.floor(s || 0));
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+function updateAccompUI() {
+  const seek = document.getElementById("accomp-seek");
+  const time = document.getElementById("accomp-time");
+  const btn = document.getElementById("accomp-play");
+  if (!accompanimentAudio) return;
+  const d = accompanimentAudio.duration || 0;
+  const t = accompanimentAudio.currentTime || 0;
+  if (seek && d) seek.value = String(Math.round((t / d) * 100));
+  if (time) time.textContent = fmtTime(t) + " / " + fmtTime(d);
+  if (btn) btn.textContent = accompanimentAudio.paused ? "▶ 播放" : "⏸ 暂停";
+}
+
+function toggleAccompaniment() {
+  const a = getAccompaniment();
+  if (a.paused) a.play().catch(() => {});
+  else a.pause();
+  updateAccompUI();
+}
+
+function seekAccompaniment(v) {
+  const a = getAccompaniment();
+  if (!a.duration) return;
+  a.currentTime = (Number(v) / 100) * a.duration;
+  updateAccompUI();
+}
+
 async function startRecording(mode, index) {
+  // 跟唱：开始录音时从头播放页面上方「伴奏」进度条绑定的同一个 Audio 对象，
+  // 这样用户能通过上方进度条暂停/拖动伴奏（在点击手势内同步触发以通过自动播放策略）。
+  if (mode === "singing") {
+    const a = getAccompaniment();
+    a.currentTime = 0;
+    a.play().catch(() => {});
+    updateAccompUI();
+  }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaRecorder = new MediaRecorder(stream);
@@ -385,6 +462,7 @@ async function startRecording(mode, index) {
     state.recordIndex = index;
     state.error = null;
     render();
+    if (mode === "singing") initViz(stream);
   } catch (e) {
     state.error = "无法访问麦克风：" + e.message;
     render();
@@ -396,8 +474,46 @@ function stopRecording() {
     state.recording = false;
     state.uploading = true;
     mediaRecorder.stop();
+    if (accompanimentAudio) accompanimentAudio.pause();
+    teardownViz();
     render();
   }
+}
+
+function initViz(stream) {
+  teardownViz();
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    audioCtx.createMediaStreamSource(stream).connect(analyser);
+    vizData = new Uint8Array(analyser.fftSize);
+    vizRaf = requestAnimationFrame(vizLoop);
+  } catch (e) { /* 浏览器不支持 Web Audio 时静默忽略 */ }
+}
+
+function vizLoop() {
+  const core = document.getElementById("rec-core");
+  if (!core || !analyser) { vizRaf = null; return; }
+  analyser.getByteTimeDomainData(vizData);
+  let sum = 0;
+  for (let i = 0; i < vizData.length; i++) { const v = (vizData[i] - 128) / 128; sum += v * v; }
+  const rms = Math.sqrt(sum / vizData.length);
+  const level = Math.min(1, rms * 5);
+  core.style.transform = `scale(${(0.85 + level * 0.55).toFixed(3)})`;
+  if (level > 0.18 && Date.now() - vizLastRing > 200) {
+    vizLastRing = Date.now();
+    const rings = document.querySelectorAll("#rec-viz .ring");
+    const r = rings[vizRingIdx % rings.length];
+    if (r) { r.classList.remove("go"); void r.offsetWidth; r.classList.add("go"); vizRingIdx++; }
+  }
+  vizRaf = requestAnimationFrame(vizLoop);
+}
+
+function teardownViz() {
+  if (vizRaf) { cancelAnimationFrame(vizRaf); vizRaf = null; }
+  if (audioCtx) { audioCtx.close().catch(() => {}); audioCtx = null; analyser = null; vizData = null; }
 }
 
 async function uploadRecording(blob, durationMs) {
@@ -442,7 +558,11 @@ async function uploadPinyin(blob, durationMs, index) {
   }
 }
 
+<<<<<<< HEAD
 function render(response = null) {
+=======
+function render(response) {
+>>>>>>> origin/sing
   renderSteps();
   const app = document.getElementById("app");
   const phase = state.session ? state.session.phase : null;
@@ -453,13 +573,14 @@ function render(response = null) {
   else if (phase === "pinyin_choice") html = pinyinChoiceHTML();
   else if (phase === "pinyin_training") html = pinyinTrainingHTML();
   else if (phase === "singing") html = singingHTML();
-  else if (phase === "analysis_complete") html = analysisHTML();
-  else if (phase === "culture") html = cultureHTML();
-  else if (phase === "report") html = reportHTML();
+  else if (phase === "analysis_complete") html = analysisHTML(response);
+  else if (phase === "culture") html = cultureHTML(response);
+  else if (phase === "report") html = reportHTML(response);
   else html = `<p>未知阶段：${phase}</p>`;
 
   if (state.error) html += `<div class="err">${escapeHtml(state.error)}</div>`;
   app.innerHTML = html;
+  if (phase === "singing") { getAccompaniment(); updateAccompUI(); }
 }
 
 function renderSteps() {
@@ -567,19 +688,33 @@ function pinyinTrainingHTML() {
 
 function singingHTML() {
   const recHtml = state.recording
-    ? `<button class="btn gold" onclick="stopRecording()">停止录音</button><div class="feedback">正在录音…请跟唱。</div>`
+    ? `<button class="btn gold" onclick="stopRecording()">停止录音</button>
+       <div id="rec-viz" class="rec-viz">
+         <div class="ring"></div><div class="ring"></div><div class="ring"></div>
+         <div class="core" id="rec-core">录音中</div>
+       </div>
+       <div class="feedback">正在录音…请跟随伴奏跟唱，圆点波动代表已收音。</div>`
     : state.uploading
       ? `<div class="feedback">已录音，正在上传与分析…</div>`
       : `<button class="btn gold" onclick="startRecording('singing')">开始录音（跟唱）</button>`;
   return `
     <h2>跟唱学习</h2>
-    <p class="subtitle">先听原唱，跟随伴奏与节奏，再录制你的纯人声上传。</p>
+    <p class="subtitle">先听原唱熟悉旋律，点「开始录音」后将自动播放伴奏，跟随伴奏录制你的纯人声。</p>
     <div class="audio-box">
+      <div style="font-size:13px;color:var(--ink-soft);margin-bottom:4px">原唱（先听）</div>
       <audio controls src="${state.course.audio}">您的浏览器不支持音频播放。</audio>
+    </div>
+    <div class="audio-box">
+      <div style="font-size:13px;color:var(--ink-soft);margin-bottom:4px">伴奏（先听 / 录音时自动播放）</div>
+      <div class="accomp-bar">
+        <button class="btn small ghost" id="accomp-play" onclick="toggleAccompaniment()">▶ 播放</button>
+        <input type="range" id="accomp-seek" min="0" max="100" value="0" oninput="seekAccompaniment(this.value)">
+        <span class="accomp-time" id="accomp-time">0:00 / 0:00</span>
+      </div>
     </div>
     <div class="verse">「天地俱生，万物以荣」<div class="py">tiān dì jù shēng，wàn wù yǐ róng</div></div>
     <div class="row">${recHtml}</div>
-    <p class="record-hint">录音需要浏览器麦克风权限（本地 localhost 环境可用）。</p>`;
+    <p class="record-hint">录音需要浏览器麦克风权限（本地 localhost 环境可用）。建议佩戴耳机，避免伴奏声被录入。</p>`;
 }
 
 function analysisHTML(response) {
@@ -587,10 +722,19 @@ function analysisHTML(response) {
   const scores = analysis.scores || {};
   const feedback = analysis.pronunciation_feedback || [];
   const recognized = analysis.recognized || "";
+  const coverage = analysis.coverage ?? (recognized ? 100 : 0);
+  let lyricNote;
+  if (!recognized) {
+    lyricNote = analysis.note || "歌词未能识别（可能是哼唱或只唱了很小一段），已根据你的音准与韵律给出反馈。";
+  } else if (coverage < 40) {
+    lyricNote = `仅识别到部分歌词（约 ${coverage}%），已对已识别部分比对，音准与韵律分析如下。`;
+  } else {
+    lyricNote = `识别歌词：${escapeHtml(recognized)}`;
+  }
   return `
     <h2>演唱分析报告</h2>
     <p class="subtitle">AI 已完成咬字、歌词、节奏、音准、韵律分析。</p>
-    ${recognized ? `<div class="feedback"><b>识别歌词：</b>${escapeHtml(recognized)}</div>` : '<div class="feedback">未识别到清晰语音，请重新跟唱。</div>'}
+    <div class="feedback">${lyricNote}</div>
     <div class="scores">
       ${scoreItem("发音", scores.pronunciation)}
       ${scoreItem("歌词", scores.lyrics_accuracy)}
@@ -630,6 +774,7 @@ function reportHTML(response) {
       <div class="scores">
         ${scoreItem("发音", report.pronunciation_score)}
         ${scoreItem("节奏", report.rhythm_score)}
+        ${scoreItem("音准", report.pitch_score)}
         ${scoreItem("韵律", report.prosody_score)}
       </div>
     </div>

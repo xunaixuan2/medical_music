@@ -112,7 +112,8 @@ def build_learning_graph(repository: SessionRepository, analyzer: AudioAnalysisP
         scores = analysis.get("scores", {})
         report = {
             "pronunciation_score": scores.get("pronunciation", 0), "rhythm_score": scores.get("rhythm", 0),
-            "prosody_score": scores.get("prosody", 0), "culture_mastery": session.get("concept_mastery", {}),
+            "pitch_score": scores.get("pitch", 0), "prosody_score": scores.get("prosody", 0),
+            "culture_mastery": session.get("concept_mastery", {}),
             "common_errors": [item["token"] for item in analysis.get("pronunciation_feedback", [])],
         }
         session["report"] = report
