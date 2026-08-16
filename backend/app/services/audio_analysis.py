@@ -1,27 +1,27 @@
 from __future__ import annotations
 
+import base64
 import difflib
-import json
 import os
 import subprocess
 import tempfile
-import wave
 from pathlib import Path
 from typing import Any, Protocol
 
-import vosk
+import httpx
 from pypinyin import Style
 from pypinyin import pinyin as to_pinyin
 
 from app.course_content import get_course
 
-vosk.SetLogLevel(-1)
-
 _PUNCT = "，。；、：！？\"'“”‘’（）《》【】,.;:!? \t\n\r"
+
+# 通义千问 ASR（DashScope 百炼）非实时语音识别接口
+_DASHSCOPE_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
 
 
 class AudioAnalysisPort(Protocol):
-    """音频分析端口（接口）。真实实现见 VoskAudioAnalyzer。"""
+    """音频分析端口（接口）。真实实现见 QwenAudioAnalyzer。"""
 
     def analyze(self, audio_ref: str, duration_ms: int, course_id: str) -> dict[str, Any]:
         ...
@@ -36,16 +36,24 @@ def _pinyin_tones(text: str) -> list[str]:
     return [syl[0] for syl in to_pinyin(text, style=Style.TONE)]
 
 
-class VoskAudioAnalyzer:
-    """基于 Vosk 的真实音频分析器。
+class QwenAudioAnalyzer:
+    """基于通义千问 ASR（qwen-audio-3.0-asr-flash）的真实音频分析器。
 
-    流程：录音文件 → ffmpeg 转 16k 单声道 wav → Vosk 中文 ASR 转写
+    流程：录音文件 → ffmpeg 转 16k 单声道 wav → base64 上传 DashScope ASR 转写
          → 与目标文本字符级对比 → 输出歌词准确度 + 逐字发音反馈。
-    局限：Vosk 小模型对古汉语/演唱场景识别率有限；节奏/音准/韵律为第二阶段能力。
+    节奏/音准/韵律为第二阶段能力（pitch、prosody 暂返回 None）。
     """
 
-    def __init__(self, model_path: str | Path, recordings_dir: str | Path) -> None:
-        self._model = vosk.Model(str(model_path))
+    def __init__(
+        self,
+        api_key: str,
+        recordings_dir: str | Path,
+        model: str = "qwen-audio-3.0-asr-flash",
+        sample_rate: int = 16000,
+    ) -> None:
+        self._api_key = api_key
+        self._model = model
+        self._sample_rate = sample_rate
         self._recordings_dir = Path(recordings_dir)
 
     def _resolve(self, audio_ref: str) -> str:
@@ -54,6 +62,7 @@ class VoskAudioAnalyzer:
         return audio_ref
 
     def _transcribe(self, audio_path: str) -> str:
+        """ffmpeg 转 16k 单声道 wav → base64 → DashScope ASR → 返回识别文本。"""
         if not os.path.exists(audio_path):
             return ""
         wav_path = None
@@ -64,23 +73,47 @@ class VoskAudioAnalyzer:
                 ["ffmpeg", "-y", "-i", audio_path, "-ar", "16000", "-ac", "1", "-f", "wav", wav_path],
                 check=True, capture_output=True,
             )
-            wf = wave.open(wav_path, "rb")
-            rec = vosk.KaldiRecognizer(self._model, 16000)
-            parts: list[str] = []
-            while True:
-                data = wf.readframes(4000)
-                if not data:
-                    break
-                if rec.AcceptWaveform(data):
-                    parts.append(json.loads(rec.Result()).get("text", ""))
-            parts.append(json.loads(rec.FinalResult()).get("text", ""))
-            wf.close()
-            return "".join(parts).strip()
+            audio_b64 = base64.b64encode(Path(wav_path).read_bytes()).decode()
+            body = {
+                "model": self._model,
+                "input": {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "input_audio",
+                                    "input_audio": {"data": f"data:audio/wav;base64,{audio_b64}"},
+                                }
+                            ],
+                        }
+                    ]
+                },
+                "parameters": {"format": "wav", "sample_rate": self._sample_rate},
+            }
+            resp = httpx.post(
+                _DASHSCOPE_URL,
+                json=body,
+                headers={"Authorization": f"Bearer {self._api_key}", "X-DashScope-SSE": "disable"},
+                timeout=120,
+            )
+            resp.raise_for_status()
+            return self._extract_text(resp.json())
         except Exception:
             return ""
         finally:
             if wav_path and os.path.exists(wav_path):
                 os.remove(wav_path)
+
+    @staticmethod
+    def _extract_text(data: dict[str, Any]) -> str:
+        output = data.get("output") or {}
+        text = output.get("text")
+        if text:
+            return str(text).strip()
+        inner = output.get("output") or {}
+        sentence = inner.get("sentence") or {}
+        return str(sentence.get("text") or "").strip()
 
     def _compare(self, target: str, recognized: str) -> tuple[int, list[dict[str, Any]]]:
         """字符级对比，返回 (准确度 0-100, 未识别目标字列表)。"""

@@ -11,7 +11,7 @@
 选择课程 → 拼音跟读 → 跟唱学习 → 演唱分析 → 文化导师 → 学习报告
 ```
 
-- **拼音跟读**：逐句领读（浏览器 TTS）＋ 录音上传 ＋ 离线语音识别（ASR）＋ 逐字发音反馈。
+- **拼音跟读**：逐句领读（浏览器 TTS）＋ 录音上传 ＋ 云端语音识别（ASR）＋ 逐字发音反馈。
 - **跟唱学习**：播放原唱，用户录制自己的跟唱并上传。
 - **演唱分析**：语音识别转写歌词，与原文逐字比对，给出「发音 / 歌词 / 节奏」得分与易错字反馈。
 - **文化导师**：围绕歌词做苏格拉底式问答，纠正「阴＝坏」之类的常见误解。
@@ -24,7 +24,7 @@
 | 选课 | 内置两门课：`四气调神大论（选段）`（可学）、`阴阳应象大论`（敬请期待占位） |
 | 拼音跟读 | 10 个句子逐句跟读，先听领读再录音，返回识别文本、准确度与逐字建议 |
 | 跟唱学习 | 播放原唱 `yuanchang.mp3`，用浏览器 `MediaRecorder` 录音并上传 |
-| 演唱分析 | Vosk 离线 ASR 转写 → 与原文字符级比对 → 发音/歌词/节奏得分 |
+| 演唱分析 | 通义千问 ASR 转写 → 与原文字符级比对 → 发音/歌词/节奏得分 |
 | 文化导师 | 基于规则的误解识别 + 引导式追问（MVP 桩，后续接 RAG/LLM） |
 | 学习报告 | 汇总演唱得分、文化掌握度、易错字、复习推荐，支持返回任意步骤 |
 
@@ -32,7 +32,7 @@
 
 - **后端**：Python 3.10+ / FastAPI / Pydantic v2 / Uvicorn
 - **状态机**：LangGraph（`learning_graph` + `culture_graph` 两张子图）
-- **语音识别**：Vosk（离线中文小模型，CPU 可跑，无需 GPU / torch）
+- **语音识别**：通义千问 ASR（`qwen-audio-3.0-asr-flash`，云端 DashScope API）
 - **拼音**：pypinyin（带声调）
 - **音频处理**：ffmpeg（webm → 16k 单声道 wav）
 - **前端**：原生 HTML/CSS/JS 单页应用（中医风格 UI），Web Speech API 领读 + MediaRecorder 录音
@@ -51,12 +51,11 @@ shengruhuaxia-demo/
 │   │   │   ├── learning_graph.py       # 学习流程状态机
 │   │   │   └── culture_graph.py        # 文化导师子图
 │   │   ├── services/
-│   │   │   └── audio_analysis.py       # Vosk 语音识别 + 发音比对
+│   │   │   └── audio_analysis.py       # 通义千问 ASR + 发音比对
 │   │   └── static/
 │   │       ├── index.html              # 前端单页应用
 │   │       └── audio/yuanchang.mp3     # 原唱音频
 │   ├── data/                           # 运行时生成（录音 + sessions.jsonl）
-│   ├── models/                         # Vosk 模型（需自行下载，不入库）
 │   ├── demo.py                         # 端到端演示脚本
 │   └── requirements.txt                # Python 依赖
 ├── 项目计划书.docx                      # 原始项目计划（参考）
@@ -70,7 +69,7 @@ shengruhuaxia-demo/
   - Windows：`winget install ffmpeg` 或到 <https://www.gyan.dev/ffmpeg/builds/> 下载
   - macOS：`brew install ffmpeg`
   - Linux：`sudo apt install ffmpeg`
-- **Vosk 中文模型**（单独下载，约 40MB，见下文）
+- **通义千问（DashScope）API Key**（云端语音识别，见下文配置）
 
 ## 快速开始
 
@@ -95,34 +94,25 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. 下载 Vosk 中文模型（必需）
+### 3. 配置通义千问 ASR 密钥（必需）
 
-语音识别需要一个离线中文模型，放到**用户主目录**（ASCII 路径）下，命名须为 `vosk-model-small-cn-0.22`：
+语音识别走云端「通义千问 ASR」（模型 `qwen-audio-3.0-asr-flash`），需要一枚 DashScope（阿里云百炼）API Key。
 
-```bash
-# macOS / Linux
-curl -L -o model.zip https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip
-unzip model.zip -d ~/
-```
+1. 复制环境变量模板：
 
-```powershell
-# Windows（PowerShell）
-Invoke-WebRequest -Uri https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip -OutFile model.zip
-Expand-Archive model.zip -DestinationPath $HOME
-```
+   ```bash
+   cp .env.example .env
+   ```
 
-完成后应得到 `~/vosk-model-small-cn-0.22/`（`am/final.mdl`、`conf/model.conf` 等文件）。
+2. 打开 `backend/.env`，填入你自己的密钥：
 
-> **模型路径说明**：程序默认从 `~/vosk-model-small-cn-0.22` 加载模型；也可用环境变量覆盖：
->
-> ```bash
-> # Windows PowerShell
-> $env:VOSK_MODEL_PATH = "D:\models\vosk-model-small-cn-0.22"
-> # macOS / Linux
-> export VOSK_MODEL_PATH=/path/to/vosk-model-small-cn-0.22
-> ```
->
-> **重要**：Vosk 的 C++ 库**无法从含中文等非 ASCII 字符的路径加载模型**。因此若你的项目路径含中文（如 `E:\作业\...`），务必把模型放到纯英文路径（默认的用户主目录通常满足），否则启动会报 `does not contain model files`。
+   ```env
+   DASHSCOPE_API_KEY=sk-你的密钥
+   QWEN_ASR_MODEL=qwen-audio-3.0-asr-flash
+   ```
+
+> **密钥获取**：登录 [阿里云百炼控制台](https://bailian.console.aliyun.com/) → 开通 DashScope → 创建 API-KEY。
+> 模型名 `QWEN_ASR_MODEL` 一般无需修改；`.env` 已被 `.gitignore` 忽略，不会提交到仓库。
 
 ### 4. 启动后端服务
 
@@ -159,14 +149,14 @@ python demo.py
 
 ## 已知限制
 
-- **语音识别精度**：Vosk 小模型对古汉语、演唱（带旋律/哼唱）场景识别率有限，静音或纯哼唱会识别为空、准确度偏低。这是模型能力边界，可通过换更大的中文模型（如 `vosk-model-cn-0.22`）或接入音准/节奏专用分析来提升。
+- **语音识别精度**：通义千问 ASR 对古汉语、演唱（带旋律/哼唱）场景的识别率优于传统离线小模型，但静音或纯哼唱仍可能识别为空、准确度偏低。可尝试在录音前先清晰朗读歌词，或后续接入音准/节奏专用分析来提升。
 - **音准 / 韵律**：当前 `pitch`、`prosody` 两项评分暂未实现（返回 `null`），属于第二阶段能力。
 - **文化导师**：目前是基于规则的「误解识别 + 引导式追问」桩，后续可替换为 RAG（检索知识库 + LLM 生成分层解释）。
 - **会话态**：MVP 使用内存字典 + JSONL 落盘，重启服务后内存会话丢失（历史记录仍在 `data/sessions.jsonl`），后续可迁移到 PostgreSQL / Redis。
 
 ## 后续规划
 
-- [ ] 接入更大的中文 ASR 模型 / 云端语音服务，提升识别率
+- [x] 接入云端语音服务（通义千问 ASR），提升识别率
 - [ ] 增加音准（pitch）、韵律（prosody）分析
 - [ ] 文化导师升级为 RAG + LLM 真实对话
 - [ ] 课程内容后台 / 数据库承接，支持多课程

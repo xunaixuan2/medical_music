@@ -2,9 +2,9 @@
 # Python 3.10+（本项目在 3.11.5 上开发验证）
 # 安装：pip install -r requirements.txt
 #
-# 注意：除下列 Python 包外，还需两个“外部”依赖：
-#   1. ffmpeg —— 系统命令，用于把浏览器录音(webm)转成 16k 单声道 wav
-#   2. Vosk 中文模型 —— 单独下载（约 40MB），见 README「快速开始」
+# 注意：除下列 Python 包外，还需一个「外部」依赖：
+#   ffmpeg —— 系统命令，用于把浏览器录音(webm)转成 16k 单声道 wav
+# 语音识别走云端「通义千问 ASR」（qwen-audio-3.0-asr-flash），密钥通过环境变量配置，见 README。
 
 # ---- Web 框架 ----
 fastapi>=0.115.0            # API 服务框架
@@ -17,5 +17,5 @@ langgraph>=0.6.0            # LangGraph 状态机：选课→跟读→跟唱→�
                             # （会顺带安装 langchain-core / langgraph-checkpoint 等）
 
 # ---- 音频分析与拼音 ----
-vosk>=0.3.45                # 离线中文语音识别（ASR）
+httpx>=0.27.0               # 调用通义千问 ASR（DashScope）HTTP 接口
 pypinyin>=0.55.0            # 汉字转拼音（带声调）

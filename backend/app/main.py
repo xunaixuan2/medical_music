@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from app.graphs.culture_graph import build_culture_graph
 from app.graphs.learning_graph import build_learning_graph
 from app.repository import SessionRepository
-from app.services.audio_analysis import VoskAudioAnalyzer
+from app.services.audio_analysis import QwenAudioAnalyzer
 
 
 class StartSessionRequest(BaseModel):
@@ -36,23 +36,27 @@ _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 _RECORDINGS_DIR = _DATA_DIR / "recordings"
 
 
-def _resolve_model_dir() -> Path:
-    """定位 Vosk 中文模型目录。
+def _load_dotenv(path: Path) -> None:
+    """极简 .env 加载：逐行读取 KEY=VALUE 写入环境变量（避免引入 python-dotenv 依赖）。"""
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip())
 
-    可通过环境变量 VOSK_MODEL_PATH 覆盖；默认放在用户主目录下（ASCII 路径）。
-    注意：项目路径含中文（如「作业」）时，Vosk 的 C++ 库无法打开模型文件，
-    故不能默认使用项目内相对路径。
-    """
-    env = os.environ.get("VOSK_MODEL_PATH")
-    if env:
-        return Path(env)
-    return Path.home() / "vosk-model-small-cn-0.22"
 
-
-_MODEL_DIR = _resolve_model_dir()
+# 读取 backend/.env（若存在），否则沿用系统环境变量
+_load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 repository = SessionRepository()
-analyzer = VoskAudioAnalyzer(model_path=_MODEL_DIR, recordings_dir=_RECORDINGS_DIR)
+analyzer = QwenAudioAnalyzer(
+    api_key=os.environ.get("DASHSCOPE_API_KEY", ""),
+    recordings_dir=_RECORDINGS_DIR,
+    model=os.environ.get("QWEN_ASR_MODEL", "qwen-audio-3.0-asr-flash"),
+)
 culture_graph = build_culture_graph()
 learning_graph = build_learning_graph(repository, analyzer, culture_graph)
 

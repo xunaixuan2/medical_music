@@ -11,15 +11,27 @@ from pathlib import Path
 from app.graphs.culture_graph import build_culture_graph
 from app.graphs.learning_graph import build_learning_graph
 from app.repository import SessionRepository
-from app.services.audio_analysis import VoskAudioAnalyzer
+from app.services.audio_analysis import QwenAudioAnalyzer
+
+
+def _load_dotenv(path: Path) -> None:
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip())
 
 
 def main() -> None:
     base = Path(__file__).resolve().parent
-    model_path = Path(os.environ.get("VOSK_MODEL_PATH") or (Path.home() / "vosk-model-small-cn-0.22"))
-    analyzer = VoskAudioAnalyzer(
-        model_path=model_path,
+    _load_dotenv(base / ".env")
+    analyzer = QwenAudioAnalyzer(
+        api_key=os.environ.get("DASHSCOPE_API_KEY", ""),
         recordings_dir=base / "data" / "recordings",
+        model=os.environ.get("QWEN_ASR_MODEL", "qwen-audio-3.0-asr-flash"),
     )
     graph = build_learning_graph(SessionRepository(), analyzer, build_culture_graph())
 
