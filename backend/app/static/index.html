@@ -262,7 +262,7 @@ const CANONICAL_ACTIONS = {
 
 const state = {
   sessionId: null, session: null, courseId: null, course: null,
-  error: null, dialogue: [], readSet: new Set(), recording: false, uploading: false,
+  error: null, dialogue: [], readSet: new Set(), recording: false, uploading: false, cultureLoading: false,
   recordMode: null, recordIndex: null, pinyinResults: {},
 };
 let mediaRecorder = null;
@@ -337,13 +337,32 @@ function leadRead(text) {
   } catch (e) { /* 浏览器不支持 TTS 时静默忽略 */ }
 }
 
-function sendCultureMessage() {
+async function sendCultureMessage() {
   const input = document.getElementById("chat-input");
-  const text = input.value.trim();
-  if (!text) return;
+  const text = input && input.value.trim();
+  if (!text || state.cultureLoading) return;
   input.value = "";
   state.dialogue.push({ role: "user", text });
-  act("culture_message", { message: text });
+  state.cultureLoading = true;
+  state.error = null;
+  render();
+  try {
+    const data = await post(`/v1/sessions/${state.sessionId}/action`, {
+      action: "culture_message", payload: { message: text },
+    });
+    state.session = data.session;
+    const turn = data.response && data.response.turn;
+    if (turn && turn.answer) {
+      state.dialogue.push({ role: "tutor", text: turn.answer, sources: data.response.sources || [] });
+    } else {
+      state.error = "文化导师暂未返回有效回答，请重试。";
+    }
+  } catch (e) {
+    state.error = "文化导师请求失败：" + e.message;
+  } finally {
+    state.cultureLoading = false;
+    render();
+  }
 }
 
 async function startRecording(mode, index) {
@@ -423,7 +442,7 @@ async function uploadPinyin(blob, durationMs, index) {
   }
 }
 
-function render() {
+function render(response = null) {
   renderSteps();
   const app = document.getElementById("app");
   const phase = state.session ? state.session.phase : null;
@@ -584,18 +603,17 @@ function analysisHTML(response) {
 }
 
 function cultureHTML(response) {
-  const turn = response && response.turn;
-  if (turn && turn.answer) state.dialogue.push({ role: "tutor", text: turn.answer });
   const bubbles = state.dialogue.map(m => `
     <div class="msg ${m.role}"><span class="who">${m.role === "user" ? "你" : "文化导师"}</span><br>
-    <span class="bubble">${escapeHtml(m.text)}</span></div>`).join("");
+    <span class="bubble">${escapeHtml(m.text)}</span>
+    ${m.sources && m.sources.length ? `<div class="feedback" style="margin-top:8px"><b>学习依据：</b>${m.sources.map(s => `${escapeHtml(s.title)}·${escapeHtml(s.citation)}`).join("；")}</div>` : ""}</div>`).join("");
   return `
     <h2>古籍文化导师</h2>
     <p class="subtitle">苏格拉底式对话：结合歌词与你的理解提问、引导。</p>
-    <div class="chat">${bubbles || '<p style="color:var(--ink-soft)">试着问一句，例如：四气调神是什么意思？</p>'}</div>
+    <div class="chat">${bubbles || '<p style="color:var(--ink-soft)">试着问一句，例如：四气调神是什么意思？</p>'}${state.cultureLoading ? '<div class="msg tutor"><span class="who">文化导师</span><br><span class="bubble">正在查阅课程资料与原典…</span></div>' : ''}</div>
     <div class="chat-input">
-      <input id="chat-input" placeholder="输入你的想法…" onkeydown="if(event.key==='Enter')sendCultureMessage()">
-      <button class="btn small" onclick="sendCultureMessage()">发送</button>
+      <input id="chat-input" placeholder="输入你的想法…" ${state.cultureLoading ? 'disabled' : ''} onkeydown="if(event.key==='Enter')sendCultureMessage()">
+      <button class="btn small" ${state.cultureLoading ? 'disabled' : ''} onclick="sendCultureMessage()">${state.cultureLoading ? '查询中…' : '发送'}</button>
     </div>
     <div class="row"><button class="btn ghost" onclick="act('complete_culture')">完成文化理解，看报告</button></div>`;
 }
